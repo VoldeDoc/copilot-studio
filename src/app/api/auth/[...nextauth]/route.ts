@@ -38,7 +38,27 @@ const handler = NextAuth({
       session.accessToken = token.accessToken as string;
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Redirect to dashboard after successful sign-in
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      if (new URL(url).origin === baseUrl) return url;
+      return `${baseUrl}/dashboard`;
+    },
+    async signIn({ user, account, profile }) {
+      // Add debug logging
+      console.log('Sign in attempt:', { 
+        user: user?.email, 
+        account: account?.provider,
+        error: null 
+      });
+      return true;
+    },
   },
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/error',
+  },
+  debug: process.env.NODE_ENV === 'development',
 });
 
 export { handler as GET, handler as POST };
