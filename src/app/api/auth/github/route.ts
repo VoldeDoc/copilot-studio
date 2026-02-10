@@ -8,7 +8,7 @@ import { GITHUB_CONFIG } from '@/lib/config';
 export async function GET() {
   const params = new URLSearchParams({
     client_id: GITHUB_CONFIG.clientId,
-    redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback`,
+    redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/callback/github`,
     scope: GITHUB_CONFIG.scopes.join(' '),
     state: crypto.randomUUID(), // CSRF protection
   });
