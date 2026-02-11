@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, 
@@ -11,7 +11,8 @@ import {
   TestTube, 
   FileText,
   ChevronRight,
-  Loader2
+  Loader2,
+  Bot
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { useCommandStore, useActivityStore, useAuthStore } from '@/stores';
@@ -37,12 +38,34 @@ const iconMap = {
   file: <FileText size={16} />,
 };
 
+interface AIProviderOption {
+  id: string;
+  name: string;
+  defaultModel: string;
+  models: string[];
+}
+
 export function CommandPanel() {
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(COMMANDS[0]);
   const [inputValue, setInputValue] = useState('');
+  const [providers, setProviders] = useState<AIProviderOption[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
   const { startExecution, appendOutput, completeExecution, isExecuting, addDiffChange } = useCommandStore();
   const { addActivity } = useActivityStore();
   const { selectedFile, selectedRepository } = useAuthStore();
+
+  // Fetch available AI providers on mount
+  useEffect(() => {
+    fetch('/api/copilot/providers')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data.length > 0) {
+          setProviders(data.data);
+          setSelectedProvider(data.data[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleExecute = async () => {
     if (!selectedCommand || !inputValue.trim() || isExecuting) return;
@@ -77,6 +100,7 @@ export function CommandPanel() {
         body: JSON.stringify({
           command: selectedCommand.category,
           input: inputValue,
+          provider: selectedProvider || undefined,
           context: {
             language: selectedFile?.name?.split('.').pop() || 'typescript',
             file: selectedFile?.path || null,
@@ -212,6 +236,35 @@ export function CommandPanel() {
         </div>
       )}
 
+      {/* AI Provider Selector */}
+      {providers.length > 0 && (
+        <div className="py-4 border-b border-zinc-800">
+          <div className="mb-2 flex items-center gap-2">
+            <Bot size={14} className="text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">AI Provider</h3>
+          </div>
+          <div className="flex gap-2">
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelectedProvider(p.id)}
+                className={cn(
+                  'flex-1 px-3 py-2 rounded-lg border text-xs font-medium transition-all duration-200',
+                  selectedProvider === p.id
+                    ? 'bg-violet-500/10 border-violet-500/50 text-violet-400'
+                    : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                )}
+              >
+                <div className="text-center">
+                  <div>{p.name}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">{p.defaultModel}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* File Selector - Always visible, doesn't re-animate on command change */}
       <div className="py-4 border-b border-zinc-800">
         <div className="mb-2 flex items-center justify-between">
@@ -245,6 +298,12 @@ export function CommandPanel() {
               <Badge variant={selectedFile ? 'info' : 'default'} size="sm">
                 <span>{selectedFile ? `File: ${selectedFile.name}` : 'No file selected'}</span>
               </Badge>
+              {selectedProvider && (
+                <Badge variant="info" size="sm">
+                  <Bot size={10} />
+                  <span className="ml-1">{providers.find(p => p.id === selectedProvider)?.name || selectedProvider}</span>
+                </Badge>
+              )}
               {selectedRepository && (
                 <Badge variant="default" size="sm">
                   <span>{selectedRepository.name}</span>
