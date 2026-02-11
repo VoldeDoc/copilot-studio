@@ -360,43 +360,48 @@ export function DiffViewer() {
           )}
         </div>
         
-        {/* View Mode Toggle */}
+        {/* View Mode Toggle & Actions */}
         <div className="flex items-center gap-2">
+          <div className="flex items-center bg-zinc-900 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('unified')}
+              className={cn(
+                'p-1.5 rounded transition-colors',
+                viewMode === 'unified' 
+                  ? 'bg-violet-500/20 text-violet-400' 
+                  : 'text-zinc-500 hover:text-zinc-300'
+              )}
+              title="Unified View"
+            >
+              <Rows size={14} />
+            </button>
+            <button
+              onClick={() => setViewMode('split')}
+              className={cn(
+                'p-1.5 rounded transition-colors',
+                viewMode === 'split' 
+                  ? 'bg-violet-500/20 text-violet-400' 
+                  : 'text-zinc-500 hover:text-zinc-300'
+              )}
+              title="Split View"
+            >
+              <Columns size={14} />
+            </button>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setIsExpanded(true)} 
+            title={diffChanges.length > 0 ? "Expand fullscreen" : "No changes to expand"}
+            disabled={diffChanges.length === 0}
+            className={cn(diffChanges.length === 0 && "opacity-50 cursor-not-allowed")}
+          >
+            <Maximize2 size={14} />
+          </Button>
           {diffChanges.length > 0 && (
-            <>
-              <div className="flex items-center bg-zinc-900 rounded-lg p-0.5">
-                <button
-                  onClick={() => setViewMode('unified')}
-                  className={cn(
-                    'p-1.5 rounded transition-colors',
-                    viewMode === 'unified' 
-                      ? 'bg-violet-500/20 text-violet-400' 
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  )}
-                  title="Unified View"
-                >
-                  <Rows size={14} />
-                </button>
-                <button
-                  onClick={() => setViewMode('split')}
-                  className={cn(
-                    'p-1.5 rounded transition-colors',
-                    viewMode === 'split' 
-                      ? 'bg-violet-500/20 text-violet-400' 
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  )}
-                  title="Split View"
-                >
-                  <Columns size={14} />
-                </button>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsExpanded(true)} title="Expand">
-                <Maximize2 size={14} />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={clearDiffs} title="Clear all">
-                <Trash2 size={14} />
-              </Button>
-            </>
+            <Button variant="ghost" size="icon" onClick={clearDiffs} title="Clear all">
+              <Trash2 size={14} />
+            </Button>
           )}
         </div>
       </CardHeader>
