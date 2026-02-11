@@ -8,7 +8,9 @@ import {
   GitBranch, 
   AlertCircle, 
   CheckCircle,
-  Trash2
+  Trash2,
+  Lock,
+  FolderGit2
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { useActivityStore } from '@/stores';
@@ -21,6 +23,8 @@ const iconMap = {
   git: <GitBranch size={14} />,
   error: <AlertCircle size={14} />,
   success: <CheckCircle size={14} />,
+  auth: <Lock size={14} />,
+  repo: <FolderGit2 size={14} />,
 };
 
 const colorMap = {
@@ -29,6 +33,8 @@ const colorMap = {
   git: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
   error: 'bg-red-500/10 text-red-400 border-red-500/20',
   success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  auth: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  repo: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
 };
 
 export function ActivityTimeline() {
@@ -36,7 +42,7 @@ export function ActivityTimeline() {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="flex-shrink-0">
+      <CardHeader className="shrink-0">
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-violet-400" />
           <CardTitle>Activity Timeline</CardTitle>

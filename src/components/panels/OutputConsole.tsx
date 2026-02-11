@@ -45,7 +45,7 @@ export function OutputConsole() {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="flex-shrink-0">
+      <CardHeader className="shrink-0">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-violet-400" />
           <CardTitle>Output Console</CardTitle>
@@ -90,7 +90,7 @@ export function OutputConsole() {
                   <span className="text-zinc-600 text-xs shrink-0 w-16 tabular-nums">
                     {formatTimestamp(line.timestamp)}
                   </span>
-                  <pre className={cn('flex-1 whitespace-pre-wrap break-words', getLineStyles(line.type))}>
+                  <pre className={cn('flex-1 whitespace-pre-wrap wrap-break-words', getLineStyles(line.type))}>
                     {line.content || ' '}
                   </pre>
                 </motion.div>

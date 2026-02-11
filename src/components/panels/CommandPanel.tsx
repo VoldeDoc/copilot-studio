@@ -15,16 +15,17 @@ import {
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
 import { useCommandStore, useActivityStore, useAuthStore } from '@/stores';
+import { CompactFileSelector } from '@/components/features';
 import { Command } from '@/types';
 import { cn } from '@/lib/utils';
 
 const COMMANDS: Command[] = [
-  { id: 'generate', name: 'Generate', description: 'Generate code from natural language', icon: 'sparkles', category: 'generate' },
-  { id: 'explain', name: 'Explain', description: 'Explain code in plain English', icon: 'message', category: 'explain' },
-  { id: 'fix', name: 'Fix', description: 'Fix bugs and issues in code', icon: 'wrench', category: 'fix' },
-  { id: 'test', name: 'Test', description: 'Generate unit tests for code', icon: 'test', category: 'test' },
-  { id: 'refactor', name: 'Refactor', description: 'Improve and optimize code', icon: 'code', category: 'refactor' },
-  { id: 'docs', name: 'Document', description: 'Generate documentation', icon: 'file', category: 'docs' },
+  { id: 'generate', name: 'Generate', description: 'Generate code from natural language', icon: 'sparkles', category: 'generate', requiresFile: false },
+  { id: 'explain', name: 'Explain', description: 'Explain code in plain English', icon: 'message', category: 'explain', requiresFile: true },
+  { id: 'fix', name: 'Fix', description: 'Fix bugs and issues in code', icon: 'wrench', category: 'fix', requiresFile: true },
+  { id: 'test', name: 'Test', description: 'Generate unit tests for code', icon: 'test', category: 'test', requiresFile: true },
+  { id: 'refactor', name: 'Refactor', description: 'Improve and optimize code', icon: 'code', category: 'refactor', requiresFile: true },
+  { id: 'docs', name: 'Document', description: 'Generate documentation', icon: 'file', category: 'docs', requiresFile: false },
 ];
 
 const iconMap = {
@@ -45,6 +46,18 @@ export function CommandPanel() {
 
   const handleExecute = async () => {
     if (!selectedCommand || !inputValue.trim() || isExecuting) return;
+
+    // Check if command requires a file but none is selected
+    if (selectedCommand.requiresFile && !selectedFile) {
+      const tempId = 'validation-' + Date.now();
+      appendOutput(tempId, '⚠️ This command requires a file to be selected. Please select a file from the Context section above.', 'warning');
+      addActivity({
+        type: 'error',
+        title: 'File Required',
+        description: `${selectedCommand.name} command needs a file selected`,
+      });
+      return;
+    }
 
     const executionId = startExecution(selectedCommand.id, selectedCommand.name, inputValue);
     
@@ -209,11 +222,34 @@ export function CommandPanel() {
               <div>
                 <h3 className="text-sm font-semibold text-zinc-100">{selectedCommand.name}</h3>
                 <p className="text-xs text-zinc-500">{selectedCommand.description}</p>
+                {selectedCommand.requiresFile && (
+                  <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                    <FileText size={10} />
+                    File selection required
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* File Selector */}
+      {selectedCommand && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="py-4 border-b border-zinc-800"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Context</h3>
+            {selectedCommand.requiresFile && !selectedFile && (
+              <Badge variant="warning" size="sm">Required</Badge>
+            )}
+          </div>
+          <CompactFileSelector />
+        </motion.div>
+      )}
 
       {/* Input Area */}
       <div className="flex-1 flex flex-col justify-end pt-4">
@@ -247,14 +283,20 @@ export function CommandPanel() {
             <Button
               variant="primary"
               onClick={handleExecute}
-              disabled={!inputValue.trim() || isExecuting}
+              disabled={!inputValue.trim() || isExecuting || (selectedCommand?.requiresFile && !selectedFile)}
               isLoading={isExecuting}
               className="flex items-center justify-center gap-2 px-4 py-2 min-w-30"
+              title={selectedCommand?.requiresFile && !selectedFile ? 'Select a file first' : ''}
             >
               {isExecuting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
                   <span>Running...</span>
+                </>
+              ) : selectedCommand?.requiresFile && !selectedFile ? (
+                <>
+                  <FileText size={16} />
+                  <span>Select File First</span>
                 </>
               ) : (
                 <>

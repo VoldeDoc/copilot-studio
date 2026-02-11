@@ -69,32 +69,37 @@ export default function DashboardPage() {
       case 'refactor':
         return (
           <div className="h-full overflow-hidden">
-            {/* Dashboard Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 h-full overflow-hidden">
+            {/* Dashboard Grid - Improved Responsive Layout */}
+            <div className="flex flex-col lg:grid lg:grid-cols-12 gap-3 sm:gap-4 p-3 sm:p-4 h-full overflow-hidden">
+              {/* Top Bar - Repository Selector (Mobile/Tablet) */}
+              <div className="lg:hidden w-full">
+                <RepositorySelector />
+              </div>
+
               {/* Left Column - Command Panel */}
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 }}
-                className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4 overflow-hidden"
+                className="lg:col-span-5 xl:col-span-4 flex flex-col gap-3 sm:gap-4 overflow-hidden min-h-100 lg:min-h-0"
               >
-                {/* Repository Selector */}
-                <div className="shrink-0">
+                {/* Repository Selector (Desktop) */}
+                <div className="hidden lg:block shrink-0">
                   <RepositorySelector />
                 </div>
                 
-                {/* Command Panel */}
+                {/* Command Panel with built-in file selector */}
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <CommandPanel />
                 </div>
               </motion.div>
 
-              {/* Center Column - Output + Diff */}
+              {/* Center Column - Output */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="lg:col-span-5 xl:col-span-6 flex flex-col gap-4 overflow-hidden"
+                className="lg:col-span-4 xl:col-span-5 flex flex-col gap-3 sm:gap-4 overflow-hidden min-h-100 lg:min-h-0"
               >
                 {/* Output Console */}
                 <div className="flex-1 min-h-0 overflow-hidden">
@@ -112,7 +117,7 @@ export default function DashboardPage() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
-                className="lg:col-span-3 overflow-hidden"
+                className="lg:col-span-3 overflow-hidden min-h-75 lg:min-h-0"
               >
                 <ActivityTimeline />
               </motion.div>
