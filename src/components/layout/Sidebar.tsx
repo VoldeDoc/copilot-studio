@@ -13,7 +13,9 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
-  Command
+  Command,
+  LayoutDashboard,
+  FolderGit2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui';
@@ -30,7 +32,7 @@ interface NavItemProps {
 function NavItem({ icon, label, isActive, badge, isCollapsed, onClick }: NavItemProps) {
   return (
     <motion.button
-      whileHover={{ x: 4 }}
+      whileHover={{ x: isCollapsed ? 0 : 4 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={cn(
@@ -38,17 +40,19 @@ function NavItem({ icon, label, isActive, badge, isCollapsed, onClick }: NavItem
         'hover:bg-zinc-800/50',
         isActive 
           ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20' 
-          : 'text-zinc-400 hover:text-zinc-200'
+          : 'text-zinc-400 hover:text-zinc-200',
+        isCollapsed && 'justify-center'
       )}
     >
-      <span className="flex-shrink-0">{icon}</span>
-      <AnimatePresence>
+      <span className="shrink-0">{icon}</span>
+      <AnimatePresence mode="wait">
         {!isCollapsed && (
           <motion.span
             initial={{ opacity: 0, width: 0 }}
             animate={{ opacity: 1, width: 'auto' }}
             exit={{ opacity: 0, width: 0 }}
-            className="flex-1 text-left truncate"
+            transition={{ duration: 0.2 }}
+            className="flex-1 text-left truncate whitespace-nowrap"
           >
             {label}
           </motion.span>
@@ -71,17 +75,20 @@ interface SidebarProps {
 export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const mainNavItems = [
-    { id: 'commands', icon: <Terminal size={18} />, label: 'Commands', badge: undefined },
+  const dashboardItems = [
+    { id: 'commands', icon: <LayoutDashboard size={18} />, label: 'Dashboard', badge: undefined },
+  ];
+
+  const commandItems = [
     { id: 'generate', icon: <Sparkles size={18} />, label: 'Generate', badge: undefined },
     { id: 'explain', icon: <BookOpen size={18} />, label: 'Explain', badge: undefined },
     { id: 'refactor', icon: <Zap size={18} />, label: 'Refactor', badge: undefined },
   ];
 
-  const secondaryNavItems = [
-    { id: 'files', icon: <FileCode size={18} />, label: 'Files', badge: 3 },
+  const workspaceItems = [
+    { id: 'files', icon: <FileCode size={18} />, label: 'Files', badge: undefined },
     { id: 'git', icon: <GitBranch size={18} />, label: 'Git', badge: undefined },
-    { id: 'history', icon: <History size={18} />, label: 'History', badge: 12 },
+    { id: 'history', icon: <History size={18} />, label: 'History', badge: undefined },
   ];
 
   return (
@@ -90,13 +97,13 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
       animate={{ width: isCollapsed ? 64 : 240 }}
       className="h-screen bg-zinc-950 border-r border-zinc-800/50 flex flex-col"
     >
-      {/* Logo */}
-      <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-800/50">
+      {/* Header with Logo and Collapse */}
+      <div className="h-14 flex items-center justify-between px-3 border-b border-zinc-800/50">
         <motion.div 
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 flex-1"
           animate={{ justifyContent: isCollapsed ? 'center' : 'flex-start' }}
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+          <div className="w-8 h-8 rounded-lg bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25 shrink-0">
             <Command size={16} className="text-white" />
           </div>
           <AnimatePresence>
@@ -105,26 +112,30 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                className="font-bold text-zinc-100 tracking-tight"
+                className="font-bold text-zinc-100 tracking-tight text-sm"
               >
                 Copilot Studio
               </motion.span>
             )}
           </AnimatePresence>
         </motion.div>
+        
+        {/* Collapse Toggle Button */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="shrink-0 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-6">
-        {/* Main Nav */}
+        {/* Dashboard */}
         <div className="space-y-1">
-          {!isCollapsed && (
-            <span className="px-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              AI Commands
-            </span>
-          )}
-          <div className="mt-2 space-y-0.5">
-            {mainNavItems.map((item) => (
+          <div className="space-y-0.5">
+            {dashboardItems.map((item) => (
               <NavItem
                 key={item.id}
                 icon={item.icon}
@@ -138,7 +149,29 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
           </div>
         </div>
 
-        {/* Secondary Nav */}
+        {/* Commands Nav */}
+        <div className="space-y-1">
+          {!isCollapsed && (
+            <span className="px-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Commands
+            </span>
+          )}
+          <div className="mt-2 space-y-0.5">
+            {commandItems.map((item) => (
+              <NavItem
+                key={item.id}
+                icon={item.icon}
+                label={item.label}
+                isActive={activeSection === item.id}
+                badge={item.badge}
+                isCollapsed={isCollapsed}
+                onClick={() => onSectionChange(item.id)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Workspace Nav */}
         <div className="space-y-1">
           {!isCollapsed && (
             <span className="px-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
@@ -146,7 +179,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
             </span>
           )}
           <div className="mt-2 space-y-0.5">
-            {secondaryNavItems.map((item) => (
+            {workspaceItems.map((item) => (
               <NavItem
                 key={item.id}
                 icon={item.icon}
@@ -162,7 +195,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-2 border-t border-zinc-800/50 space-y-1">
+      <div className="p-2 border-t border-zinc-800/50">
         <NavItem
           icon={<Settings size={18} />}
           label="Settings"
@@ -170,15 +203,6 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
           isCollapsed={isCollapsed}
           onClick={() => onSectionChange('settings')}
         />
-        
-        {/* Collapse Toggle */}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
-        >
-          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          {!isCollapsed && <span>Collapse</span>}
-        </button>
       </div>
     </motion.aside>
   );

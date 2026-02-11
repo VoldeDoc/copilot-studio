@@ -49,49 +49,108 @@ export function CommandPanel() {
     
     addActivity({
       type: 'command',
-      title: `Executed ${selectedCommand.name}`,
+      title: `Executing ${selectedCommand.name}`,
       description: inputValue,
     });
 
-    // Simulate streaming output
-    const responses = [
-      'Analyzing request...',
-      'Processing with GitHub Copilot...',
-      'Generating response...',
-      '',
-      '```typescript',
-      'export function greet(name: string): string {',
-      '  return `Hello, ${name}!`;',
-      '}',
-      '```',
-      '',
-      '✓ Code generated successfully',
-    ];
+    try {
+      // Call the actual backend API
+      const response = await fetch('/api/copilot/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          command: selectedCommand.category,
+          input: inputValue,
+          context: {
+            language: 'typescript',
+            file: 'Active File'
+          }
+        }),
+      });
 
-    for (const line of responses) {
-      await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 200));
-      appendOutput(executionId, line, line.startsWith('✓') ? 'success' : 'info');
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Stream the output
+        if (data.data.output) {
+          const lines = data.data.output.split('\n');
+          for (const line of lines) {
+            if (line.trim()) {
+              await new Promise(resolve => setTimeout(resolve, 50));
+              appendOutput(executionId, line, 'info');
+            }
+          }
+        }
+
+        // Add diff changes if any
+        if (data.data.changes && data.data.changes.length > 0) {
+          for (const change of data.data.changes) {
+            const before = change.before || '';
+            const after = change.after || '';
+            const beforeLines = before.split('\n');
+            const afterLines = after.split('\n');
+            const additions = afterLines.filter((line: string, i: number) => !beforeLines[i] || line !== beforeLines[i]).length;
+            const deletions = beforeLines.filter((line: string, i: number) => !afterLines[i] || line !== afterLines[i]).length;
+            
+            addDiffChange({
+              filename: change.file || 'current.ts',
+              language: change.language || 'typescript',
+              before: before,
+              after: after,
+              additions: additions,
+              deletions: deletions,
+              applied: false,
+              executionId: executionId,
+            });
+          }
+        } else if (selectedCommand.category === 'generate' || selectedCommand.category === 'refactor') {
+          // Add a sample diff for demonstration
+          const sampleBefore = `function greet(name) {\n  console.log("Hello " + name);\n}`;
+          const sampleAfter = `function greet(name: string): void {\n  console.log(\`Hello \${name}\`);\n}`;
+          
+          addDiffChange({
+            filename: 'example.ts',
+            language: 'typescript',
+            before: sampleBefore,
+            after: sampleAfter,
+            additions: 2,
+            deletions: 2,
+            applied: false,
+            executionId: executionId,
+          });
+        }
+
+        appendOutput(executionId, '', 'info');
+        appendOutput(executionId, `✓ ${selectedCommand.name} completed successfully`, 'success');
+        completeExecution(executionId, 'success');
+        
+        addActivity({
+          type: 'success',
+          title: 'Command completed',
+          description: `${selectedCommand.name} finished successfully`,
+        });
+      } else {
+        appendOutput(executionId, `✗ Error: ${data.error || 'Command failed'}`, 'error');
+        completeExecution(executionId, 'error');
+        
+        addActivity({
+          type: 'error',
+          title: 'Command failed',
+          description: data.error || 'Unknown error occurred',
+        });
+      }
+    } catch (error) {
+      appendOutput(executionId, `✗ Network error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      completeExecution(executionId, 'error');
+      
+      addActivity({
+        type: 'error',
+        title: 'Network error',
+        description: 'Failed to connect to server',
+      });
     }
-
-    // Add a sample diff change
-    addDiffChange({
-      filename: 'src/utils/greet.ts',
-      language: 'typescript',
-      before: '// TODO: implement greet function',
-      after: `export function greet(name: string): string {
-  return \`Hello, \${name}!\`;
-}`,
-      additions: 3,
-      deletions: 1,
-    });
-
-    completeExecution(executionId, 'success');
-    
-    addActivity({
-      type: 'success',
-      title: 'Command completed',
-      description: `${selectedCommand.name} finished in 1.2s`,
-    });
 
     setInputValue('');
   };
@@ -161,18 +220,18 @@ export function CommandPanel() {
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={`Enter your ${selectedCommand?.name.toLowerCase() || 'command'} request...`}
-              className="w-full h-24 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-100 placeholder:text-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+              className="w-full h-24 bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-100 placeholder:text-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all"
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="default" size="sm">
                 <Code size={12} />
-                TypeScript
+                <span className="ml-1">TypeScript</span>
               </Badge>
               <Badge variant="default" size="sm">
-                Context: Active File
+                <span>Context: Active File</span>
               </Badge>
             </div>
 
@@ -181,15 +240,16 @@ export function CommandPanel() {
               onClick={handleExecute}
               disabled={!inputValue.trim() || isExecuting}
               isLoading={isExecuting}
+              className="flex items-center justify-center gap-2 px-4 py-2 min-w-30"
             >
               {isExecuting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Running...
+                  <span>Running...</span>
                 </>
               ) : (
                 <>
-                  Execute
+                  <span>Execute</span>
                   <ChevronRight size={16} />
                 </>
               )}

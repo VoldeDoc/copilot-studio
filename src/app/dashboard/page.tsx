@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MainLayout } from '@/components/layout';
 import { CommandPanel, OutputConsole, DiffViewer, ActivityTimeline } from '@/components/panels';
 import { RepositorySelector } from '@/components/features';
 import { useAuthStore } from '@/stores';
+import { Sparkles, BookOpen, Zap, FileCode, GitBranch, History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
+import { Card } from '@/components/ui';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading, user, setUser, setLoading } = useAuthStore();
+  const [activeView, setActiveView] = useState('commands');
 
   // Check session on mount
   useEffect(() => {
@@ -57,62 +60,175 @@ export default function DashboardPage() {
     return null; // Will redirect
   }
 
+  // Render different views based on active section
+  const renderView = () => {
+    switch (activeView) {
+      case 'commands':
+      case 'generate':
+      case 'explain':
+      case 'refactor':
+        return (
+          <div className="h-full overflow-hidden">
+            {/* Dashboard Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 h-full overflow-hidden">
+              {/* Left Column - Command Panel */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 }}
+                className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4 overflow-hidden"
+              >
+                {/* Repository Selector */}
+                <div className="shrink-0">
+                  <RepositorySelector />
+                </div>
+                
+                {/* Command Panel */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <CommandPanel />
+                </div>
+              </motion.div>
+
+              {/* Center Column - Output + Diff */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="lg:col-span-5 xl:col-span-6 flex flex-col gap-4 overflow-hidden"
+              >
+                {/* Output Console */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <OutputConsole />
+                </div>
+                
+                {/* Diff Viewer */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <DiffViewer />
+                </div>
+              </motion.div>
+
+              {/* Right Column - Activity Timeline */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+                className="lg:col-span-3 overflow-hidden"
+              >
+                <ActivityTimeline />
+              </motion.div>
+            </div>
+          </div>
+        );
+
+      case 'files':
+        return (
+          <div className="h-full p-4 overflow-auto">
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 rounded-lg bg-violet-500/10">
+                  <FileCode size={24} className="text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-100">File Explorer</h2>
+                  <p className="text-sm text-zinc-400">Browse and manage repository files</p>
+                </div>
+              </div>
+              <div className="text-zinc-400">File explorer view coming soon...</div>
+            </Card>
+          </div>
+        );
+
+      case 'git':
+        return (
+          <div className="h-full p-4 overflow-auto">
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 rounded-lg bg-violet-500/10">
+                  <GitBranch size={24} className="text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-100">Git Management</h2>
+                  <p className="text-sm text-zinc-400">Manage branches, commits, and pull requests</p>
+                </div>
+              </div>
+              <div className="text-zinc-400">Git management view coming soon...</div>
+            </Card>
+          </div>
+        );
+
+      case 'history':
+        return (
+          <div className="h-full p-4 overflow-auto">
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 rounded-lg bg-violet-500/10">
+                  <HistoryIcon size={24} className="text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-100">Command History</h2>
+                  <p className="text-sm text-zinc-400">View all past AI commands and their results</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <ActivityTimeline />
+              </div>
+            </Card>
+          </div>
+        );
+
+      case 'settings':
+        return (
+          <div className="h-full p-4 overflow-auto">
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 rounded-lg bg-violet-500/10">
+                  <SettingsIcon size={24} className="text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-100">Settings</h2>
+                  <p className="text-sm text-zinc-400">Configure your workspace preferences</p>
+                </div>
+              </div>
+              <div className="space-y-4 mt-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-300 mb-2">GitHub Integration</h3>
+                  <p className="text-sm text-zinc-400">Connected as: {user?.login || 'Unknown'}</p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-300 mb-2">AI Model</h3>
+                  <p className="text-sm text-zinc-400">Using: GitHub Copilot</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="h-full p-4 overflow-auto">
+            <Card className="p-6">
+              <h2 className="text-xl font-bold text-zinc-100 mb-2">Welcome to Copilot Studio</h2>
+              <p className="text-zinc-400">Select a section from the sidebar to get started.</p>
+            </Card>
+          </div>
+        );
+    }
+  };
+
   return (
-    <MainLayout>
-      <div className="h-full p-6">
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-12 gap-6 h-full">
-          {/* Left Column - Command Panel */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-            className="col-span-12 lg:col-span-4 xl:col-span-3"
-          >
-            <div className="h-full flex flex-col gap-6">
-              {/* Repository Selector */}
-              <div className="shrink-0">
-                <RepositorySelector />
-              </div>
-              
-              {/* Command Panel */}
-              <div className="flex-1 min-h-0">
-                <CommandPanel />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Center Column - Output + Diff */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="col-span-12 lg:col-span-5 xl:col-span-6"
-          >
-            <div className="h-full flex flex-col gap-6">
-              {/* Output Console */}
-              <div className="flex-1 min-h-0">
-                <OutputConsole />
-              </div>
-              
-              {/* Diff Viewer */}
-              <div className="flex-1 min-h-0">
-                <DiffViewer />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Right Column - Activity Timeline */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="col-span-12 lg:col-span-3"
-          >
-            <ActivityTimeline />
-          </motion.div>
-        </div>
-      </div>
+    <MainLayout activeSection={activeView} onSectionChange={setActiveView}>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeView}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+          className="h-full"
+        >
+          {renderView()}
+        </motion.div>
+      </AnimatePresence>
     </MainLayout>
   );
 }

@@ -10,26 +10,32 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
-  Clock
+  Clock,
+  LogOut
 } from 'lucide-react';
 import { Button, Badge, Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores';
+import type { User } from '@/types';
 
 interface HeaderProps {
-  projectName: string;
-  repoName: string;
-  branch: string;
-  syncStatus: 'synced' | 'pending' | 'error';
-  lastSync: string;
+  user?: User | null;
+  repoName?: string;
+  branch?: string;
+  syncStatus?: 'synced' | 'pending' | 'error';
+  lastSync?: string;
 }
 
 export function Header({ 
-  projectName = 'my-project',
-  repoName = 'username/repo',
+  user,
+  repoName,
   branch = 'main',
   syncStatus = 'synced',
   lastSync = '2 min ago'
-}: Partial<HeaderProps>) {
+}: HeaderProps) {
+  const router = useRouter();
+  const { logout } = useAuthStore();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const statusConfig = {
@@ -55,26 +61,30 @@ export function Header({
   return (
     <header className="h-14 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/50 flex items-center justify-between px-4 sticky top-0 z-50">
       {/* Left: Project Info */}
-      <div className="flex items-center gap-4">
-        {/* Repo Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-zinc-800">
-          <Cloud size={14} className="text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-300">{repoName}</span>
-        </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {repoName && (
+          <>
+            {/* Repo Badge */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-zinc-800">
+              <Cloud size={14} className="text-zinc-500" />
+              <span className="text-sm font-medium text-zinc-300 truncate max-w-50">{repoName}</span>
+            </div>
 
-        {/* Branch */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-zinc-800">
-          <GitBranch size={14} className="text-violet-400" />
-          <span className="text-sm font-medium text-zinc-300">{branch}</span>
-        </div>
+            {/* Branch */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-zinc-800">
+              <GitBranch size={14} className="text-violet-400" />
+              <span className="text-sm font-medium text-zinc-300">{branch}</span>
+            </div>
 
-        {/* Sync Status */}
-        <Badge variant={status.variant} pulse={syncStatus === 'pending'}>
-          {status.icon}
-          <span>{status.label}</span>
-        </Badge>
+            {/* Sync Status */}
+            <Badge variant={status.variant} pulse={syncStatus === 'pending'}>
+              {status.icon}
+              <span>{status.label}</span>
+            </Badge>
 
-        <span className="text-xs text-zinc-500">Last sync: {lastSync}</span>
+            <span className="text-xs text-zinc-500 hidden lg:inline">Last sync: {lastSync}</span>
+          </>
+        )}
       </div>
 
       {/* Center: Search */}
@@ -97,7 +107,7 @@ export function Header({
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
         {/* Refresh */}
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon">
           <RefreshCw size={18} />
         </Button>
 
@@ -107,11 +117,37 @@ export function Header({
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-violet-500 rounded-full" />
         </Button>
 
-        {/* User */}
-        <div className="ml-2 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-            U
-          </div>
+        {/* User Menu */}
+        <div className="ml-2 flex items-center gap-3">
+          {user?.avatarUrl ? (
+            <img 
+              src={user.avatarUrl} 
+              alt={user.name || user.login}
+              className="w-8 h-8 rounded-full border-2 border-zinc-700"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium border-2 border-zinc-700">
+              {user?.name?.[0] || user?.login?.[0] || 'U'}
+            </div>
+          )}
+          {user && (
+            <div className="hidden md:flex flex-col items-start">
+              <span className="text-sm font-medium text-zinc-200">{user.name || user.login}</span>
+              <span className="text-xs text-zinc-500">@{user.login}</span>
+            </div>
+          )}
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={async () => {
+              await fetch('/api/auth/session', { method: 'DELETE' });
+              logout();
+              router.push('/');
+            }}
+            title="Logout"
+          >
+            <LogOut size={16} />
+          </Button>
         </div>
       </div>
     </header>

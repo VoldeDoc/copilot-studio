@@ -11,15 +11,19 @@ import {
   ChevronRight,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  CheckCircle,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
-import { useCommandStore } from '@/stores';
+import { useCommandStore, useActivityStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
 
 export function DiffViewer() {
-  const { diffChanges } = useCommandStore();
+  const { diffChanges, applyChange, rejectChange, undoChange } = useCommandStore();
+  const { addActivity } = useActivityStore();
   const [expandedDiff, setExpandedDiff] = useState<string | null>(diffChanges[0]?.id || null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -29,9 +33,42 @@ export function DiffViewer() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleApply = (diffId: string, filename: string) => {
+    if (applyChange) {
+      applyChange(diffId);
+      addActivity({
+        type: 'success',
+        title: 'Changes Applied',
+        description: `Applied changes to ${filename}`,
+      });
+    }
+  };
+
+  const handleReject = (diffId: string, filename: string) => {
+    if (rejectChange) {
+      rejectChange(diffId);
+      addActivity({
+        type: 'file',
+        title: 'Changes Rejected',
+        description: `Rejected changes to ${filename}`,
+      });
+    }
+  };
+
+  const handleUndo = (diffId: string, filename: string) => {
+    if (undoChange) {
+      undoChange(diffId);
+      addActivity({
+        type: 'file',
+        title: 'Changes Undone',
+        description: `Reverted changes to ${filename}`,
+      });
+    }
+  };
+
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="flex-shrink-0">
+      <CardHeader className="shrink-0">
         <div className="flex items-center gap-2">
           <GitCompare size={16} className="text-violet-400" />
           <CardTitle>Diff Viewer</CardTitle>
@@ -157,14 +194,54 @@ export function DiffViewer() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center justify-end gap-2 p-2 bg-zinc-900/30 border-t border-zinc-800">
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink size={14} />
-                          Open File
-                        </Button>
-                        <Button variant="primary" size="sm">
-                          Apply Changes
-                        </Button>
+                      <div className="flex items-center justify-between p-2 bg-zinc-900/30 border-t border-zinc-800">
+                        <div className="flex items-center gap-2">
+                          {diff.applied && (
+                            <Badge variant="success" size="sm">
+                              <CheckCircle size={12} />
+                              <span>Applied</span>
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleCopy(`${diff.id}-full`, diff.after)}
+                          >
+                            <Copy size={14} />
+                            Copy
+                          </Button>
+                          {diff.applied ? (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleUndo(diff.id, diff.filename)}
+                            >
+                              <RotateCcw size={14} />
+                              Undo
+                            </Button>
+                          ) : (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleReject(diff.id, diff.filename)}
+                              >
+                                <XCircle size={14} />
+                                Reject
+                              </Button>
+                              <Button 
+                                variant="primary" 
+                                size="sm"
+                                onClick={() => handleApply(diff.id, diff.filename)}
+                              >
+                                <CheckCircle size={14} />
+                                Apply
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </motion.div>
                   )}

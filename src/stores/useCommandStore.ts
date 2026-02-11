@@ -14,6 +14,9 @@ interface CommandState {
   appendOutput: (executionId: string, content: string, type: OutputLine['type']) => void;
   completeExecution: (executionId: string, status: 'success' | 'error') => void;
   addDiffChange: (change: Omit<DiffChange, 'id' | 'timestamp'>) => void;
+  applyChange: (diffId: string) => void;
+  rejectChange: (diffId: string) => void;
+  undoChange: (diffId: string) => void;
   clearOutput: () => void;
   clearDiffs: () => void;
 }
@@ -103,6 +106,28 @@ export const useCommandStore = create<CommandState>((set, get) => ({
 
     set((state) => ({
       diffChanges: [diffChange, ...state.diffChanges],
+    }));
+  },
+
+  applyChange: (diffId) => {
+    set((state) => ({
+      diffChanges: state.diffChanges.map((diff) =>
+        diff.id === diffId ? { ...diff, applied: true } : diff
+      ),
+    }));
+  },
+
+  rejectChange: (diffId) => {
+    set((state) => ({
+      diffChanges: state.diffChanges.filter((diff) => diff.id !== diffId),
+    }));
+  },
+
+  undoChange: (diffId) => {
+    set((state) => ({
+      diffChanges: state.diffChanges.map((diff) =>
+        diff.id === diffId ? { ...diff, applied: false } : diff
+      ),
     }));
   },
 
