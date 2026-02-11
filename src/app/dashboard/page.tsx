@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MainLayout } from '@/components/layout';
-import { CommandPanel, OutputConsole, DiffViewer, ActivityTimeline } from '@/components/panels';
+import { CommandPanel, OutputConsole, DiffViewer, ActivityTimeline, FileExplorer, GitPanel } from '@/components/panels';
 import { RepositorySelector } from '@/components/features';
 import { useAuthStore } from '@/stores';
 import { Sparkles, BookOpen, Zap, FileCode, GitBranch, History as HistoryIcon, Settings as SettingsIcon } from 'lucide-react';
@@ -122,37 +122,90 @@ export default function DashboardPage() {
 
       case 'files':
         return (
-          <div className="h-full p-4 overflow-auto">
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-lg bg-violet-500/10">
-                  <FileCode size={24} className="text-violet-400" />
+          <div className="h-full overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 h-full overflow-hidden">
+              {/* Left - Repository Selector + File Explorer */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="lg:col-span-4 flex flex-col gap-4 overflow-hidden"
+              >
+                <div className="shrink-0">
+                  <RepositorySelector />
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-zinc-100">File Explorer</h2>
-                  <p className="text-sm text-zinc-400">Browse and manage repository files</p>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <FileExplorer />
                 </div>
-              </div>
-              <div className="text-zinc-400">File explorer view coming soon...</div>
-            </Card>
+              </motion.div>
+
+              {/* Center - Command Panel + Output */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="lg:col-span-5 flex flex-col gap-4 overflow-hidden"
+              >
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <CommandPanel />
+                </div>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <OutputConsole />
+                </div>
+              </motion.div>
+
+              {/* Right - Diff Viewer */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                className="lg:col-span-3 overflow-hidden"
+              >
+                <DiffViewer />
+              </motion.div>
+            </div>
           </div>
         );
 
       case 'git':
         return (
-          <div className="h-full p-4 overflow-auto">
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-lg bg-violet-500/10">
-                  <GitBranch size={24} className="text-violet-400" />
+          <div className="h-full overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 h-full overflow-hidden">
+              {/* Left - Repository Selector + Git Panel */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="lg:col-span-4 flex flex-col gap-4 overflow-hidden"
+              >
+                <div className="shrink-0">
+                  <RepositorySelector />
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-zinc-100">Git Management</h2>
-                  <p className="text-sm text-zinc-400">Manage branches, commits, and pull requests</p>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <GitPanel />
                 </div>
-              </div>
-              <div className="text-zinc-400">Git management view coming soon...</div>
-            </Card>
+              </motion.div>
+
+              {/* Center - File Explorer */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="lg:col-span-5 flex flex-col gap-4 overflow-hidden"
+              >
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <FileExplorer />
+                </div>
+              </motion.div>
+
+              {/* Right - Activity Timeline */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                className="lg:col-span-3 overflow-hidden"
+              >
+                <ActivityTimeline />
+              </motion.div>
+            </div>
           </div>
         );
 

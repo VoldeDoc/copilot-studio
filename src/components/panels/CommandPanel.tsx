@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button, Input, Card, Badge } from '@/components/ui';
-import { useCommandStore, useActivityStore } from '@/stores';
+import { useCommandStore, useActivityStore, useAuthStore } from '@/stores';
 import { Command } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +41,7 @@ export function CommandPanel() {
   const [inputValue, setInputValue] = useState('');
   const { startExecution, appendOutput, completeExecution, isExecuting, addDiffChange } = useCommandStore();
   const { addActivity } = useActivityStore();
+  const { selectedFile, selectedRepository } = useAuthStore();
 
   const handleExecute = async () => {
     if (!selectedCommand || !inputValue.trim() || isExecuting) return;
@@ -64,8 +65,11 @@ export function CommandPanel() {
           command: selectedCommand.category,
           input: inputValue,
           context: {
-            language: 'typescript',
-            file: 'Active File'
+            language: selectedFile?.name?.split('.').pop() || 'typescript',
+            file: selectedFile?.path || null,
+            fileName: selectedFile?.name || null,
+            fileContent: selectedFile?.content || null,
+            repository: selectedRepository ? `${selectedRepository.owner}/${selectedRepository.name}` : null
           }
         }),
       });
@@ -228,11 +232,16 @@ export function CommandPanel() {
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="default" size="sm">
                 <Code size={12} />
-                <span className="ml-1">TypeScript</span>
+                <span className="ml-1">{selectedFile?.name?.split('.').pop()?.toUpperCase() || 'TypeScript'}</span>
               </Badge>
-              <Badge variant="default" size="sm">
-                <span>Context: Active File</span>
+              <Badge variant={selectedFile ? 'info' : 'default'} size="sm">
+                <span>{selectedFile ? `File: ${selectedFile.name}` : 'No file selected'}</span>
               </Badge>
+              {selectedRepository && (
+                <Badge variant="default" size="sm">
+                  <span>{selectedRepository.name}</span>
+                </Badge>
+              )}
             </div>
 
             <Button

@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware';
 import { User, Repository, WorkspaceSession, Branch } from '@/types';
 import { generateId } from '@/lib/utils';
 
+interface SelectedFile {
+  name: string;
+  path: string;
+  content: string;
+}
+
 interface AuthState {
   // Auth state
   user: User | null;
@@ -14,6 +20,7 @@ interface AuthState {
   selectedRepository: Repository | null;
   branches: Branch[];
   selectedBranch: string | null;
+  selectedFile: SelectedFile | null;
   
   // Session state
   session: WorkspaceSession | null;
@@ -25,6 +32,7 @@ interface AuthState {
   selectRepository: (repo: Repository | null) => void;
   setBranches: (branches: Branch[]) => void;
   selectBranch: (branch: string | null) => void;
+  setSelectedFile: (file: SelectedFile | null) => void;
   createSession: () => void;
   logout: () => void;
 }
@@ -40,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
       selectedRepository: null,
       branches: [],
       selectedBranch: null,
+      selectedFile: null,
       session: null,
 
       setUser: (user) => {
@@ -58,13 +67,16 @@ export const useAuthStore = create<AuthState>()(
         set({ 
           selectedRepository: repo,
           selectedBranch: repo?.defaultBranch || null,
-          branches: []
+          branches: [],
+          selectedFile: null
         });
       },
 
       setBranches: (branches) => set({ branches }),
 
-      selectBranch: (branch) => set({ selectedBranch: branch }),
+      selectBranch: (branch) => set({ selectedBranch: branch, selectedFile: null }),
+
+      setSelectedFile: (file) => set({ selectedFile: file }),
 
       createSession: () => {
         const { user, selectedRepository, selectedBranch } = get();
@@ -92,6 +104,7 @@ export const useAuthStore = create<AuthState>()(
           selectedRepository: null,
           branches: [],
           selectedBranch: null,
+          selectedFile: null,
           session: null,
         });
       },
