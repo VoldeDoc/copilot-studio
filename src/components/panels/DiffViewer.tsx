@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   GitCompare, 
@@ -18,7 +18,10 @@ import {
   Rows,
   Loader2,
   GitBranch,
-  Trash2
+  Trash2,
+  Maximize2,
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
 import { useCommandStore, useActivityStore, useAuthStore } from '@/stores';
@@ -35,6 +38,8 @@ export function DiffViewer() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('unified');
   const [isPushing, setIsPushing] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
 
   const handleCopy = (id: string, code: string) => {
     navigator.clipboard.writeText(code);
@@ -75,6 +80,17 @@ export function DiffViewer() {
     }
   };
 
+  // Close on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isExpanded) {
+        setIsExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isExpanded]);
+
   const handlePushToGitHub = async (diffId: string, filename: string, newContent: string) => {
     if (!selectedRepository || !selectedBranch) {
       addActivity({
@@ -86,6 +102,7 @@ export function DiffViewer() {
     }
 
     setIsPushing(diffId);
+    setPushError(null);
 
     try {
       // Get the file SHA first (needed for update)
@@ -125,13 +142,32 @@ export function DiffViewer() {
         });
       } else {
         const errorData = await pushResponse.json();
-        throw new Error(errorData.error || 'Push failed');
+        const errorMessage = errorData.error || 'Push failed';
+        
+        // Check for permission errors and provide helpful message
+        if (errorMessage.includes('Resource not accessible') || errorMessage.includes('403')) {
+          setPushError('Permission denied. Please log out and log back in to grant write access to your repositories.');
+          addActivity({
+            type: 'error',
+            title: 'Push Failed - Permission Required',
+            description: 'Log out and log back in to grant repository write access',
+          });
+        } else {
+          setPushError(errorMessage);
+          addActivity({
+            type: 'error',
+            title: 'Push Failed',
+            description: errorMessage,
+          });
+        }
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to push changes';
+      setPushError(errorMessage);
       addActivity({
         type: 'error',
         title: 'Push Failed',
-        description: error instanceof Error ? error.message : 'Failed to push changes',
+        description: errorMessage,
       });
     } finally {
       setIsPushing(null);
@@ -313,6 +349,7 @@ export function DiffViewer() {
   };
 
   return (
+    <>
     <Card className="h-full flex flex-col overflow-hidden">
       <CardHeader className="shrink-0 border-b border-zinc-800">
         <div className="flex items-center gap-2">
@@ -353,6 +390,9 @@ export function DiffViewer() {
                   <Columns size={14} />
                 </button>
               </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsExpanded(true)} title="Expand">
+                <Maximize2 size={14} />
+              </Button>
               <Button variant="ghost" size="icon" onClick={clearDiffs} title="Clear all">
                 <Trash2 size={14} />
               </Button>
@@ -360,6 +400,29 @@ export function DiffViewer() {
           )}
         </div>
       </CardHeader>
+
+      {/* Push Error Alert */}
+      {pushError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-3 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3"
+        >
+          <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-amber-200 font-medium">Push Failed</p>
+            <p className="text-xs text-amber-300/80 mt-1">{pushError}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 text-amber-400 hover:text-amber-300 p-0 h-auto"
+              onClick={() => setPushError(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Diff List */}
       <div className="flex-1 overflow-auto custom-scrollbar p-2 sm:p-3 space-y-3">
@@ -570,5 +633,195 @@ export function DiffViewer() {
         </div>
       )}
     </Card>
+
+    {/* Fullscreen Modal */}
+    <AnimatePresence>
+      {isExpanded && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 md:p-8"
+          onClick={() => setIsExpanded(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="w-full h-full max-w-7xl bg-zinc-900 rounded-xl border border-zinc-800 flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <GitCompare size={20} className="text-violet-400" />
+                <h2 className="text-lg font-semibold text-zinc-100">Code Changes</h2>
+                {diffChanges.length > 0 && (
+                  <Badge variant="info" size="sm">{diffChanges.length} change{diffChanges.length > 1 ? 's' : ''}</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode('unified')}
+                    className={cn(
+                      'px-3 py-1.5 rounded text-sm transition-colors',
+                      viewMode === 'unified' 
+                        ? 'bg-violet-500/20 text-violet-400' 
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    )}
+                  >
+                    Unified
+                  </button>
+                  <button
+                    onClick={() => setViewMode('split')}
+                    className={cn(
+                      'px-3 py-1.5 rounded text-sm transition-colors',
+                      viewMode === 'split' 
+                        ? 'bg-violet-500/20 text-violet-400' 
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    )}
+                  >
+                    Split
+                  </button>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsExpanded(false)}>
+                  <X size={20} />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-auto custom-scrollbar p-4 space-y-4">
+              {diffChanges.map((diff) => (
+                <div
+                  key={diff.id}
+                  className={cn(
+                    'border rounded-lg overflow-hidden',
+                    diff.applied 
+                      ? 'border-emerald-500/30 bg-emerald-500/5' 
+                      : 'border-zinc-800 bg-zinc-900/30'
+                  )}
+                >
+                  {/* File Header */}
+                  <div className="flex items-center justify-between p-4 bg-zinc-900/50 border-b border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <FileCode size={18} className={diff.applied ? 'text-emerald-400' : 'text-zinc-500'} />
+                      <span className="text-base font-medium text-zinc-200">{diff.filename}</span>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <Plus size={14} /> {diff.additions}
+                        </span>
+                        <span className="text-red-400 flex items-center gap-1">
+                          <Minus size={14} /> {diff.deletions}
+                        </span>
+                      </div>
+                      {diff.applied && (
+                        <Badge variant="success" size="sm">
+                          <CheckCircle size={12} /> Applied
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Diff Content - Expanded */}
+                  <div className="max-h-96 overflow-auto custom-scrollbar">
+                    {viewMode === 'unified' 
+                      ? renderUnifiedDiff(diff.before, diff.after)
+                      : renderSplitDiff(diff.before, diff.after)
+                    }
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between p-4 bg-zinc-900/50 border-t border-zinc-800">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" size="sm">{diff.language}</Badge>
+                      <span className="text-sm text-zinc-500">{formatRelativeTime(diff.timestamp)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleCopy(`${diff.id}-modal`, diff.after)}
+                      >
+                        {copiedId === `${diff.id}-modal` ? (
+                          <><Check size={14} className="text-emerald-400" /> Copied!</>
+                        ) : (
+                          <><Copy size={14} /> Copy</>
+                        )}
+                      </Button>
+                      {diff.applied ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleUndo(diff.id, diff.filename)}
+                        >
+                          <RotateCcw size={14} /> Undo
+                        </Button>
+                      ) : (
+                        <>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleReject(diff.id, diff.filename)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
+                            <XCircle size={14} /> Reject
+                          </Button>
+                          <Button 
+                            variant="primary" 
+                            size="sm"
+                            onClick={() => handleApply(diff.id, diff.filename)}
+                          >
+                            <CheckCircle size={14} /> Apply
+                          </Button>
+                          {selectedRepository && (
+                            <Button 
+                              variant="primary" 
+                              size="sm"
+                              onClick={() => handlePushToGitHub(diff.id, diff.filename, diff.after)}
+                              disabled={isPushing === diff.id}
+                              className="bg-emerald-600 hover:bg-emerald-500"
+                            >
+                              {isPushing === diff.id ? (
+                                <><Loader2 size={14} className="animate-spin" /> Pushing...</>
+                              ) : (
+                                <><Upload size={14} /> Push to GitHub</>
+                              )}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 flex items-center justify-between p-4 border-t border-zinc-800 bg-zinc-900/30">
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-zinc-500">
+                  {diffChanges.filter(d => d.applied).length}/{diffChanges.length} applied
+                </span>
+                <span className="text-sm text-emerald-400 flex items-center gap-1">
+                  <Plus size={14} /> {diffChanges.reduce((acc, d) => acc + d.additions, 0)} additions
+                </span>
+                <span className="text-sm text-red-400 flex items-center gap-1">
+                  <Minus size={14} /> {diffChanges.reduce((acc, d) => acc + d.deletions, 0)} deletions
+                </span>
+              </div>
+              {selectedRepository && (
+                <span className="text-sm text-zinc-500 flex items-center gap-2">
+                  <GitBranch size={14} />
+                  {selectedRepository.owner}/{selectedRepository.name} : {selectedBranch || 'main'}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
