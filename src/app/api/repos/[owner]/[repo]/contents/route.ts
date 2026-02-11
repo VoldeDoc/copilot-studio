@@ -105,3 +105,81 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }, { status: 500 });
   }
 }
+
+/**
+ * PUT /api/repos/[owner]/[repo]/contents
+ * Creates or updates a file in the repository
+ */
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const accessToken = await getAccessToken();
+  
+  if (!accessToken) {
+    return NextResponse.json({
+      success: false,
+      error: 'Not authenticated',
+    }, { status: 401 });
+  }
+
+  const { owner, repo } = await params;
+  
+  try {
+    const body = await request.json();
+    const { path, content, message, branch, sha } = body;
+
+    if (!path || !content || !message) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields: path, content, message',
+      }, { status: 400 });
+    }
+
+    const url = `${GITHUB_CONFIG.apiUrl}/repos/${owner}/${repo}/contents/${path}`;
+
+    const payload: Record<string, string> = {
+      message,
+      content, // Already base64 encoded from client
+      branch: branch || 'main',
+    };
+
+    // Include SHA if updating existing file
+    if (sha) {
+      payload.sha = sha;
+    }
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        path: data.content.path,
+        sha: data.content.sha,
+        commit: {
+          sha: data.commit.sha,
+          message: data.commit.message,
+          url: data.commit.html_url,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Contents update error:', error);
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update file',
+    }, { status: 500 });
+  }
+}
