@@ -192,50 +192,36 @@ export function CommandPanel() {
       </div>
 
       {/* Selected Command Info */}
-      <AnimatePresence mode="wait">
-        {selectedCommand && (
-          <motion.div
-            key={selectedCommand.id}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="py-4 border-b border-zinc-800"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-violet-500/10 text-violet-400">
-                {iconMap[selectedCommand.icon as keyof typeof iconMap]}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-100">{selectedCommand.name}</h3>
-                <p className="text-xs text-zinc-500">{selectedCommand.description}</p>
-                {selectedCommand.requiresFile && (
-                  <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                    <FileText size={10} />
-                    File selection required
-                  </p>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* File Selector */}
       {selectedCommand && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="py-4 border-b border-zinc-800"
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Context</h3>
-            {selectedCommand.requiresFile && !selectedFile && (
-              <Badge variant="warning" size="sm">Required</Badge>
-            )}
+        <div className="py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 rounded-lg bg-violet-500/10 text-violet-400">
+              {iconMap[selectedCommand.icon as keyof typeof iconMap]}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">{selectedCommand.name}</h3>
+              <p className="text-xs text-zinc-500">{selectedCommand.description}</p>
+              {selectedCommand.requiresFile && (
+                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                  <FileText size={10} />
+                  File selection required
+                </p>
+              )}
+            </div>
           </div>
-          <CompactFileSelector />
-        </motion.div>
+        </div>
       )}
+
+      {/* File Selector - Always visible, doesn't re-animate on command change */}
+      <div className="py-4 border-b border-zinc-800">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Context</h3>
+          {selectedCommand?.requiresFile && !selectedFile && (
+            <Badge variant="warning" size="sm">Required</Badge>
+          )}
+        </div>
+        <CompactFileSelector />
+      </div>
 
       {/* Input Area */}
       <div className="pt-4">
