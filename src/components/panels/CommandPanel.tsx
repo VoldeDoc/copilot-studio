@@ -180,7 +180,8 @@ export function CommandPanel() {
   };
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
       {/* Command Selector */}
       <div className="pb-4 border-b border-zinc-800">
         <h2 className="text-sm font-semibold text-zinc-100 mb-3">AI Commands</h2>
@@ -252,7 +253,7 @@ export function CommandPanel() {
       )}
 
       {/* Input Area */}
-      <div className="flex-1 flex flex-col justify-end pt-4">
+      <div className="pt-4">
         <div className="space-y-3">
           <div className="relative">
             <textarea
@@ -307,6 +308,7 @@ export function CommandPanel() {
             </Button>
           </div>
         </div>
+      </div>
       </div>
     </Card>
   );

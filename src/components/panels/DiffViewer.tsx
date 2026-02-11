@@ -79,7 +79,7 @@ export function DiffViewer() {
       </CardHeader>
 
       {/* Diff List */}
-      <div className="flex-1 overflow-auto mt-4 space-y-2">
+      <div className="flex-1 overflow-auto custom-scrollbar mt-4 space-y-2">
         {diffChanges.length === 0 ? (
           <div className="h-full flex items-center justify-center text-zinc-600">
             <div className="text-center">

@@ -179,7 +179,7 @@ export function CompactFileSelector() {
               </div>
 
               {/* File List */}
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto custom-scrollbar">
                 {isLoading ? (
                   <div className="flex items-center justify-center p-8">
                     <Loader2 className="w-5 h-5 animate-spin text-violet-400" />

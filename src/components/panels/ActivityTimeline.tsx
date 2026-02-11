@@ -53,7 +53,7 @@ export function ActivityTimeline() {
       </CardHeader>
 
       {/* Timeline */}
-      <div className="flex-1 overflow-auto mt-4">
+      <div className="flex-1 overflow-auto custom-scrollbar mt-4">
         {activities.length === 0 ? (
           <div className="h-full flex items-center justify-center text-zinc-600">
             <div className="text-center">

@@ -66,7 +66,7 @@ export function OutputConsole() {
       {/* Console Output */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-auto bg-zinc-950 rounded-lg border border-zinc-800 mt-4 font-mono text-sm"
+        className="flex-1 overflow-auto custom-scrollbar bg-zinc-950 rounded-lg border border-zinc-800 mt-4 font-mono text-sm"
       >
         {outputLines.length === 0 ? (
           <div className="h-full flex items-center justify-center text-zinc-600">

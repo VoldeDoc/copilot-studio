@@ -344,7 +344,7 @@ export function FileExplorer() {
               </div>
               <Badge variant="info" size="sm">{formatSize(fileContent.size)}</Badge>
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto custom-scrollbar">
               {isLoadingFile ? (
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
