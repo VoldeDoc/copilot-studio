@@ -108,12 +108,12 @@ export function CommandPanel() {
             const after = change.after || '';
             const beforeLines = before.split('\n');
             const afterLines = after.split('\n');
-            const additions = afterLines.filter((line: string, i: number) => !beforeLines[i] || line !== beforeLines[i]).length;
-            const deletions = beforeLines.filter((line: string, i: number) => !afterLines[i] || line !== afterLines[i]).length;
+            const additions = change.additions || afterLines.filter((line: string, i: number) => !beforeLines[i] || line !== beforeLines[i]).length;
+            const deletions = change.deletions || beforeLines.filter((line: string, i: number) => !afterLines[i] || line !== afterLines[i]).length;
             
             addDiffChange({
-              filename: change.file || 'current.ts',
-              language: change.language || 'typescript',
+              filename: change.filename || change.file || selectedFile?.name || 'untitled.ts',
+              language: change.language || selectedFile?.name?.split('.').pop() || 'typescript',
               before: before,
               after: after,
               additions: additions,
@@ -122,21 +122,6 @@ export function CommandPanel() {
               executionId: executionId,
             });
           }
-        } else if (selectedCommand.category === 'generate' || selectedCommand.category === 'refactor') {
-          // Add a sample diff for demonstration
-          const sampleBefore = `function greet(name) {\n  console.log("Hello " + name);\n}`;
-          const sampleAfter = `function greet(name: string): void {\n  console.log(\`Hello \${name}\`);\n}`;
-          
-          addDiffChange({
-            filename: 'example.ts',
-            language: 'typescript',
-            before: sampleBefore,
-            after: sampleAfter,
-            additions: 2,
-            deletions: 2,
-            applied: false,
-            executionId: executionId,
-          });
         }
 
         appendOutput(executionId, '', 'info');

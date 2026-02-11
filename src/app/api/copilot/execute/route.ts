@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       data: {
         command,
         output: result.output,
-        diff: result.diff,
+        changes: result.changes,
         executionTime: result.executionTime,
       },
     }, {
@@ -162,6 +162,74 @@ async function simulateCopilotExecution(
 ) {
   // Simulate processing time
   await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+
+  // Get the actual file content if provided
+  const fileContent = context?.fileContent as string || '';
+  const fileName = context?.fileName as string || 'untitled.ts';
+  const filePath = context?.file as string || fileName;
+  const language = context?.language as string || 'typescript';
+
+  // Generate actual refactored/fixed code based on the input file content
+  const generateChanges = () => {
+    if (!fileContent) {
+      return null;
+    }
+
+    // For refactor/fix commands, transform the actual code
+    let transformedCode = fileContent;
+    let description = '';
+
+    if (command === 'refactor') {
+      // Apply some actual transformations
+      transformedCode = fileContent
+        // Convert string concatenation to template literals
+        .replace(/(['"])(.*?)\1\s*\+\s*(\w+)/g, '`$2${$3}`')
+        // Add type annotations to function parameters if missing
+        .replace(/function\s+(\w+)\s*\(\s*(\w+)\s*\)/g, 'function $1($2: any)')
+        // Convert var to const/let
+        .replace(/\bvar\s+/g, 'const ')
+        // Add return types to functions
+        .replace(/function\s+(\w+)\s*\((.*?)\)\s*{/g, 'function $1($2): void {')
+        // Use arrow functions for simple callbacks
+        .replace(/function\s*\(\s*\)\s*{/g, '() => {');
+      description = 'Refactored code with modern JavaScript/TypeScript patterns';
+    } else if (command === 'fix') {
+      transformedCode = fileContent
+        // Add optional chaining
+        .replace(/(\w+)\.(\w+)\.(\w+)/g, '$1?.$2?.$3')
+        // Add null checks
+        .replace(/if\s*\(\s*(\w+)\s*\)/g, 'if ($1 != null)')
+        // Fix common typos
+        .replace(/cosnt/g, 'const')
+        .replace(/fucntion/g, 'function');
+      description = 'Fixed potential bugs and added null safety';
+    } else if (command === 'generate') {
+      // For generate, create new code based on the prompt
+      transformedCode = `// Generated based on: ${prompt}\n\n${fileContent || '// New generated code'}`;
+      description = 'Generated new code based on your request';
+    }
+
+    // Only return changes if the code actually changed
+    if (transformedCode !== fileContent) {
+      const beforeLines = fileContent.split('\n').length;
+      const afterLines = transformedCode.split('\n').length;
+      
+      return [{
+        file: filePath,
+        filename: fileName,
+        language: language,
+        before: fileContent,
+        after: transformedCode,
+        additions: Math.max(0, afterLines - beforeLines) + Math.floor(Math.random() * 5),
+        deletions: Math.max(0, beforeLines - afterLines) + Math.floor(Math.random() * 3),
+        description: description,
+      }];
+    }
+
+    return null;
+  };
+
+  const changes = generateChanges();
 
   const outputs: Record<string, { output: string; diff?: object }> = {
     explain: {
@@ -405,7 +473,7 @@ const processed = processItems(items);
   
   return {
     output: result.output,
-    diff: result.diff || null,
+    changes: changes || null,
     executionTime: Math.floor(500 + Math.random() * 1000),
   };
 }
