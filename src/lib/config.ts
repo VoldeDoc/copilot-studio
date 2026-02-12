@@ -27,53 +27,67 @@ export const SESSION_CONFIG = {
  * AI Provider Configuration
  * 
  * Supports two providers:
- * 1. GitHub Models — free with your GitHub token (uses models.inference.ai.azure.com)
- * 2. Google Gemini — free tier available (uses generativelanguage.googleapis.com)
+ * 1. Google Gemini — primary AI provider using native @google/genai SDK
+ * 2. GitHub Models — Mistral/Codestral via @mistralai/mistralai SDK
  * 
  * Environment variables:
+ * - GEMINI_API_KEY (recommended) — API key from Google AI Studio
  * - GITHUB_TOKEN (optional) — GitHub personal access token for GitHub Models
- * - GEMINI_API_KEY (optional) — API key from Google AI Studio
  */
-export type AIProvider = 'github' | 'gemini';
+export type AIProvider = 'gemini' | 'github';
 
 export const AI_PROVIDERS = {
-  github: {
-    id: 'github' as const,
-    name: 'GitHub Models',
-    baseUrl: 'https://models.inference.ai.azure.com',
-    apiKey: process.env.GITHUB_TOKEN || '',
-    defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o-mini', 'gpt-4o', 'Meta-Llama-3.1-70B-Instruct', 'Mistral-Large-2411'],
-  },
   gemini: {
     id: 'gemini' as const,
     name: 'Google Gemini',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     apiKey: process.env.GEMINI_API_KEY || '',
-    defaultModel: 'gemini-2.0-flash',
-    models: ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+    defaultModel: 'gemini-3-flash-preview',
+    models: ['gemini-3-flash-preview', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+    // Generation config
+    maxOutputTokens: 8192,
+    temperature: 0.7,
+    topP: 0.95,
+    topK: 64,
+  },
+  github: {
+    id: 'github' as const,
+    name: 'GitHub Models (Codestral)',
+    endpoint: 'https://models.github.ai/inference',
+    apiKey: process.env.GITHUB_TOKEN || '',
+    defaultModel: 'mistral-ai/Codestral-2501',
+    models: ['mistral-ai/Codestral-2501', 'mistral-ai/Mistral-Large-2411', 'mistral-ai/Mistral-Small-24B-Instruct-2501'],
+    maxTokens: 4096,
+    temperature: 0.4,
+    topP: 1.0,
   },
 } as const;
 
+/** Max retries for rate-limited requests */
+export const AI_RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 2000,
+  backoffMultiplier: 2,
+};
+
 /**
- * Get the config for a specific provider. Falls back to whichever provider has a key set.
+ * Get the config for a specific provider. Defaults to Gemini.
  */
 export function getAIConfig(provider?: AIProvider) {
   // If a specific provider is requested and has a key, use it
   if (provider && AI_PROVIDERS[provider]?.apiKey) {
     const p = AI_PROVIDERS[provider];
-    return { apiKey: p.apiKey, baseUrl: p.baseUrl, model: p.defaultModel, provider: p.id };
+    return { apiKey: p.apiKey, model: p.defaultModel, provider: p.id };
   }
 
-  // Otherwise, pick the first provider that has an API key
-  if (AI_PROVIDERS.github.apiKey) {
-    return { apiKey: AI_PROVIDERS.github.apiKey, baseUrl: AI_PROVIDERS.github.baseUrl, model: AI_PROVIDERS.github.defaultModel, provider: 'github' as const };
-  }
+  // Default: prefer Gemini, then fall back to GitHub
   if (AI_PROVIDERS.gemini.apiKey) {
-    return { apiKey: AI_PROVIDERS.gemini.apiKey, baseUrl: AI_PROVIDERS.gemini.baseUrl, model: AI_PROVIDERS.gemini.defaultModel, provider: 'gemini' as const };
+    return { apiKey: AI_PROVIDERS.gemini.apiKey, model: AI_PROVIDERS.gemini.defaultModel, provider: 'gemini' as const };
+  }
+  if (AI_PROVIDERS.github.apiKey) {
+    return { apiKey: AI_PROVIDERS.github.apiKey, model: AI_PROVIDERS.github.defaultModel, provider: 'github' as const };
   }
 
-  return { apiKey: '', baseUrl: '', model: '', provider: null };
+  return { apiKey: '', model: '', provider: null };
 }
 
 export const COPILOT_COMMANDS = {

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { COPILOT_COMMANDS, getAIConfig, AIProvider } from '@/lib/config';
+import { GoogleGenAI } from '@google/genai';
+import { Mistral } from '@mistralai/mistralai';
+import { COPILOT_COMMANDS, getAIConfig, AIProvider, AI_PROVIDERS, AI_RETRY_CONFIG } from '@/lib/config';
 
 /**
  * Helper: Get session from cookie
@@ -92,106 +94,14 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = buildSystemPrompt(command, context);
+    const fullPrompt = `${systemPrompt}\n\n${prompt}`;
 
-    // Call AI API with streaming
-    const aiResponse = await fetch(`${aiConfig.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${aiConfig.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: aiConfig.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        temperature: command === 'fix' ? 0.2 : 0.4,
-        max_tokens: 4096,
-        stream: true,
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('AI stream error:', aiResponse.status, errorText);
-      return new Response(JSON.stringify({ error: `AI API error (${aiResponse.status})` }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    // ─── Branch: Gemini (native SDK) vs GitHub Models (OpenAI-compatible) ───
+    if (aiConfig.provider === 'gemini') {
+      return streamGemini(aiConfig.apiKey, aiConfig.model, fullPrompt, command);
+    } else {
+      return streamGitHubModels(aiConfig.apiKey, aiConfig.model, systemPrompt, prompt, command);
     }
-
-    // Pipe the AI stream to the client as SSE
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        // Send start event
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', command })}\n\n`));
-
-        try {
-          const reader = aiResponse.body?.getReader();
-          if (!reader) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'data', content: 'No response from AI.' })}\n\n`));
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false })}\n\n`));
-            controller.close();
-            return;
-          }
-
-          let buffer = '';
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-
-            // Process complete SSE lines from the AI response
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-              const data = trimmed.slice(6);
-              if (data === '[DONE]') continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content;
-                if (content) {
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ type: 'data', content })}\n\n`)
-                  );
-                }
-              } catch {
-                // Skip malformed JSON chunks
-              }
-            }
-          }
-
-          // Send completion event
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'end', success: true })}\n\n`));
-        } catch (err) {
-          console.error('Stream processing error:', err);
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: 'Stream interrupted' })}\n\n`)
-          );
-        }
-
-        controller.close();
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
   } catch (error) {
     console.error('Stream error:', error);
     return new Response(JSON.stringify({ error: 'Stream failed' }), {
@@ -199,4 +109,152 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+}
+
+/**
+ * Stream from Gemini using native @google/genai SDK
+ */
+async function streamGemini(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  command: string
+): Promise<Response> {
+  const ai = new GoogleGenAI({ apiKey });
+  const geminiConfig = AI_PROVIDERS.gemini;
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', command })}\n\n`));
+
+      let attempt = 0;
+      while (attempt <= AI_RETRY_CONFIG.maxRetries) {
+        try {
+          const response = await ai.models.generateContentStream({
+            model,
+            contents: prompt,
+            config: {
+              maxOutputTokens: geminiConfig.maxOutputTokens,
+              temperature: command === 'fix' ? 0.2 : geminiConfig.temperature,
+              topP: geminiConfig.topP,
+              topK: geminiConfig.topK,
+            },
+          });
+
+          for await (const chunk of response) {
+            const text = chunk.text;
+            if (text) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'data', content: text })}\n\n`)
+              );
+            }
+          }
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'end', success: true })}\n\n`));
+          controller.close();
+          return;
+        } catch (error: unknown) {
+          const err = error as { status?: number; message?: string };
+          if (err.status === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+            const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+            console.log(`Gemini stream rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            attempt++;
+            continue;
+          }
+          console.error('Gemini stream error:', err.message || error);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: err.message || 'Gemini stream failed' })}\n\n`)
+          );
+          controller.close();
+          return;
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+/**
+ * Stream from GitHub Models using @mistralai/mistralai SDK (Codestral)
+ */
+async function streamGitHubModels(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userMessage: string,
+  command: string
+): Promise<Response> {
+  const githubConfig = AI_PROVIDERS.github;
+  const client = new Mistral({
+    apiKey,
+    serverURL: githubConfig.endpoint,
+  });
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', command })}\n\n`));
+
+      let attempt = 0;
+      while (attempt <= AI_RETRY_CONFIG.maxRetries) {
+        try {
+          const streamResponse = await client.chat.stream({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userMessage },
+            ],
+            temperature: command === 'fix' ? 0.2 : githubConfig.temperature,
+            maxTokens: githubConfig.maxTokens,
+            topP: githubConfig.topP,
+          });
+
+          for await (const event of streamResponse) {
+            const content = event.data?.choices?.[0]?.delta?.content;
+            if (content) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'data', content })}\n\n`)
+              );
+            }
+          }
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'end', success: true })}\n\n`));
+          controller.close();
+          return;
+        } catch (error: unknown) {
+          const err = error as { statusCode?: number; message?: string };
+          if (err.statusCode === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+            const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+            console.log(`GitHub Models stream rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            attempt++;
+            continue;
+          }
+          console.error('GitHub Models stream error:', err.message || error);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: err.message || 'GitHub Models stream failed' })}\n\n`)
+          );
+          controller.close();
+          return;
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }

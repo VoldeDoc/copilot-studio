@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { SESSION_CONFIG, COPILOT_COMMANDS, getAIConfig, AIProvider } from '@/lib/config';
+import { GoogleGenAI } from '@google/genai';
+import { Mistral } from '@mistralai/mistralai';
+import { SESSION_CONFIG, COPILOT_COMMANDS, getAIConfig, AIProvider, AI_PROVIDERS, AI_RETRY_CONFIG } from '@/lib/config';
 
 // In-memory session tracking for rate limiting (use Redis in production)
 const sessionCommands = new Map<string, { count: number; resetAt: number }>();
@@ -206,7 +208,7 @@ Return the fully documented version of the code in a single markdown code block.
 }
 
 /**
- * Call the AI API (OpenAI-compatible) to process the command
+ * Call the AI API — uses native Gemini SDK for Gemini, OpenAI-compatible for GitHub Models
  */
 async function callAI(
   command: string,
@@ -219,7 +221,7 @@ async function callAI(
   const aiConfig = getAIConfig(provider);
   if (!aiConfig.apiKey) {
     throw new Error(
-      'No AI provider configured. Add GITHUB_TOKEN or GEMINI_API_KEY to your .env file.'
+      'No AI provider configured. Add GEMINI_API_KEY or GITHUB_TOKEN to your .env file.'
     );
   }
 
@@ -235,37 +237,16 @@ async function callAI(
     userMessage = `${prompt}\n\nFile: ${fileName}\n\`\`\`${language}\n${fileContent}\n\`\`\``;
   }
 
-  const response = await fetch(`${aiConfig.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${aiConfig.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: aiConfig.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: command === 'fix' ? 0.2 : 0.4,
-      max_tokens: 4096,
-    }),
-  });
+  let aiOutput: string;
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error('AI API error:', response.status, errorBody);
-    if (response.status === 401) {
-      throw new Error(`Invalid API key for ${aiConfig.provider}. Check your ${aiConfig.provider === 'github' ? 'GITHUB_TOKEN' : 'GEMINI_API_KEY'} in .env.`);
-    }
-    if (response.status === 429) {
-      throw new Error('AI API rate limit exceeded. Please try again in a moment.');
-    }
-    throw new Error(`AI API request failed (${response.status}). Check your API key and configuration.`);
+  if (aiConfig.provider === 'gemini') {
+    // ─── Native Gemini SDK ───
+    aiOutput = await callGemini(aiConfig.apiKey, aiConfig.model, systemPrompt, userMessage, command);
+  } else {
+    // ─── GitHub Models (OpenAI-compatible) ───
+    aiOutput = await callGitHubModels(aiConfig.apiKey, aiConfig.model, systemPrompt, userMessage, command);
   }
 
-  const data = await response.json();
-  const aiOutput = data.choices?.[0]?.message?.content || 'No response from AI.';
   const executionTime = Date.now() - startTime;
 
   // For code-modifying commands, extract the code block to create a diff
@@ -289,6 +270,102 @@ async function callAI(
   }
 
   return { output: aiOutput, changes, executionTime };
+}
+
+/**
+ * Call Gemini using the native @google/genai SDK with retry on rate limits
+ */
+async function callGemini(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userMessage: string,
+  command: string
+): Promise<string> {
+  const ai = new GoogleGenAI({ apiKey });
+  const geminiConfig = AI_PROVIDERS.gemini;
+
+  for (let attempt = 0; attempt <= AI_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: `${systemPrompt}\n\n${userMessage}`,
+        config: {
+          maxOutputTokens: geminiConfig.maxOutputTokens,
+          temperature: command === 'fix' ? 0.2 : geminiConfig.temperature,
+          topP: geminiConfig.topP,
+          topK: geminiConfig.topK,
+        },
+      });
+
+      return response.text || 'No response from Gemini.';
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string };
+      if (err.status === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+        const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+        console.log(`Gemini rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      console.error('Gemini API error:', err.message || error);
+      if (err.status === 429) {
+        throw new Error('Gemini API rate limit exceeded. Please try again in a moment.');
+      }
+      throw new Error(`Gemini API error: ${err.message || 'Unknown error'}`);
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
+/**
+ * Call GitHub Models using @mistralai/mistralai SDK (Codestral) with retry on rate limits
+ */
+async function callGitHubModels(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userMessage: string,
+  command: string
+): Promise<string> {
+  const githubConfig = AI_PROVIDERS.github;
+  const client = new Mistral({
+    apiKey,
+    serverURL: githubConfig.endpoint,
+  });
+
+  for (let attempt = 0; attempt <= AI_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const response = await client.chat.complete({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: command === 'fix' ? 0.2 : githubConfig.temperature,
+        maxTokens: githubConfig.maxTokens,
+        topP: githubConfig.topP,
+      });
+
+      return response.choices?.[0]?.message?.content as string || 'No response from GitHub Models.';
+    } catch (error: unknown) {
+      const err = error as { statusCode?: number; message?: string };
+      if (err.statusCode === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+        const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+        console.log(`GitHub Models rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      if (err.statusCode === 401) {
+        throw new Error('Invalid GITHUB_TOKEN. Check your .env file.');
+      }
+      if (err.statusCode === 429) {
+        throw new Error('GitHub Models rate limit exceeded. Please try again in a moment.');
+      }
+      console.error('GitHub Models API error:', err.message || error);
+      throw new Error(`GitHub Models API error: ${err.message || 'Unknown error'}`);
+    }
+  }
+  throw new Error('Max retries exceeded');
 }
 
 /**
