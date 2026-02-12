@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { GoogleGenAI } from '@google/genai';
-import { Mistral } from '@mistralai/mistralai';
+import ModelClient, { isUnexpected } from '@azure-rest/ai-inference';
+import { AzureKeyCredential } from '@azure/core-auth';
 import { SESSION_CONFIG, COPILOT_COMMANDS, getAIConfig, AIProvider, AI_PROVIDERS, AI_RETRY_CONFIG } from '@/lib/config';
 
 // In-memory session tracking for rate limiting (use Redis in production)
@@ -318,7 +319,7 @@ async function callGemini(
 }
 
 /**
- * Call GitHub Models using @mistralai/mistralai SDK (Codestral) with retry on rate limits
+ * Call GitHub Models using @azure-rest/ai-inference SDK with retry on rate limits
  */
 async function callGitHubModels(
   apiKey: string,
@@ -327,42 +328,51 @@ async function callGitHubModels(
   userMessage: string,
   command: string
 ): Promise<string> {
-  const githubConfig = AI_PROVIDERS.github;
-  const client = new Mistral({
-    apiKey,
-    serverURL: githubConfig.endpoint,
-  });
+  const client = ModelClient(
+    AI_PROVIDERS.github.endpoint,
+    new AzureKeyCredential(apiKey),
+  );
 
   for (let attempt = 0; attempt <= AI_RETRY_CONFIG.maxRetries; attempt++) {
     try {
-      const response = await client.chat.complete({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: command === 'fix' ? 0.2 : githubConfig.temperature,
-        maxTokens: githubConfig.maxTokens,
-        topP: githubConfig.topP,
+      const response = await client.path('/chat/completions').post({
+        body: {
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          model,
+          temperature: command === 'fix' ? 0.2 : 0.4,
+          max_tokens: 4096,
+        },
       });
 
-      return response.choices?.[0]?.message?.content as string || 'No response from GitHub Models.';
-    } catch (error: unknown) {
-      const err = error as { statusCode?: number; message?: string };
-      if (err.statusCode === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+      if (isUnexpected(response)) {
+        const status = response.status;
+        if (status === '429' && attempt < AI_RETRY_CONFIG.maxRetries) {
+          const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+          console.log(`GitHub Models rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          continue;
+        }
+        if (status === '401') {
+          throw new Error('Invalid GITHUB_TOKEN. Check your .env file.');
+        }
+        throw new Error(`GitHub Models API error (${status}): ${response.body?.error?.message || 'Unknown error'}`);
+      }
+
+      return response.body.choices[0].message.content || 'No response from GitHub Models.';
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('GitHub Models')) {
+        throw error;
+      }
+      if (attempt < AI_RETRY_CONFIG.maxRetries) {
         const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
-        console.log(`GitHub Models rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+        console.log(`GitHub Models error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         continue;
       }
-      if (err.statusCode === 401) {
-        throw new Error('Invalid GITHUB_TOKEN. Check your .env file.');
-      }
-      if (err.statusCode === 429) {
-        throw new Error('GitHub Models rate limit exceeded. Please try again in a moment.');
-      }
-      console.error('GitHub Models API error:', err.message || error);
-      throw new Error(`GitHub Models API error: ${err.message || 'Unknown error'}`);
+      throw error;
     }
   }
   throw new Error('Max retries exceeded');

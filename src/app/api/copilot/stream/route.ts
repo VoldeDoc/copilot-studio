@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { GoogleGenAI } from '@google/genai';
-import { Mistral } from '@mistralai/mistralai';
+import ModelClient, { isUnexpected } from '@azure-rest/ai-inference';
+import { AzureKeyCredential } from '@azure/core-auth';
 import { COPILOT_COMMANDS, getAIConfig, AIProvider, AI_PROVIDERS, AI_RETRY_CONFIG } from '@/lib/config';
 
 /**
@@ -184,7 +185,7 @@ async function streamGemini(
 }
 
 /**
- * Stream from GitHub Models using @mistralai/mistralai SDK (Codestral)
+ * Stream from GitHub Models using @azure-rest/ai-inference SDK
  */
 async function streamGitHubModels(
   apiKey: string,
@@ -193,13 +194,13 @@ async function streamGitHubModels(
   userMessage: string,
   command: string
 ): Promise<Response> {
-  const githubConfig = AI_PROVIDERS.github;
-  const client = new Mistral({
-    apiKey,
-    serverURL: githubConfig.endpoint,
-  });
+  const client = ModelClient(
+    AI_PROVIDERS.github.endpoint,
+    new AzureKeyCredential(apiKey),
+  );
   const encoder = new TextEncoder();
 
+  // Non-streaming call, then simulate streaming by chunking the response
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', command })}\n\n`));
@@ -207,41 +208,59 @@ async function streamGitHubModels(
       let attempt = 0;
       while (attempt <= AI_RETRY_CONFIG.maxRetries) {
         try {
-          const streamResponse = await client.chat.stream({
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userMessage },
-            ],
-            temperature: command === 'fix' ? 0.2 : githubConfig.temperature,
-            maxTokens: githubConfig.maxTokens,
-            topP: githubConfig.topP,
+          const response = await client.path('/chat/completions').post({
+            body: {
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage },
+              ],
+              model,
+              temperature: command === 'fix' ? 0.2 : 0.4,
+              max_tokens: 4096,
+            },
           });
 
-          for await (const event of streamResponse) {
-            const content = event.data?.choices?.[0]?.delta?.content;
-            if (content) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: 'data', content })}\n\n`)
-              );
+          if (isUnexpected(response)) {
+            const status = response.status;
+            if (status === '429' && attempt < AI_RETRY_CONFIG.maxRetries) {
+              const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
+              console.log(`GitHub Models stream rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              attempt++;
+              continue;
             }
+            const errorMsg = response.body?.error?.message || `API error (${status})`;
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: errorMsg })}\n\n`)
+            );
+            controller.close();
+            return;
+          }
+
+          const content = response.body.choices[0].message.content || '';
+          // Simulate streaming by sending content in chunks
+          const chunkSize = 20;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            const chunk = content.slice(i, i + chunkSize);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'data', content: chunk })}\n\n`)
+            );
           }
 
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'end', success: true })}\n\n`));
           controller.close();
           return;
-        } catch (error: unknown) {
-          const err = error as { statusCode?: number; message?: string };
-          if (err.statusCode === 429 && attempt < AI_RETRY_CONFIG.maxRetries) {
+        } catch (error) {
+          if (attempt < AI_RETRY_CONFIG.maxRetries) {
             const delayMs = AI_RETRY_CONFIG.initialDelayMs * Math.pow(AI_RETRY_CONFIG.backoffMultiplier, attempt);
-            console.log(`GitHub Models stream rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
+            console.log(`GitHub Models stream error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${AI_RETRY_CONFIG.maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delayMs));
             attempt++;
             continue;
           }
-          console.error('GitHub Models stream error:', err.message || error);
+          console.error('GitHub Models stream error:', error);
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: err.message || 'GitHub Models stream failed' })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ type: 'end', success: false, error: 'GitHub Models stream failed' })}\n\n`)
           );
           controller.close();
           return;

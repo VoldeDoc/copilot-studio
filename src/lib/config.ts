@@ -28,7 +28,7 @@ export const SESSION_CONFIG = {
  * 
  * Supports two providers:
  * 1. Google Gemini — primary AI provider using native @google/genai SDK
- * 2. GitHub Models — Mistral/Codestral via @mistralai/mistralai SDK
+ * 2. GitHub Models — OpenAI models via @azure-rest/ai-inference SDK
  * 
  * Environment variables:
  * - GEMINI_API_KEY (recommended) — API key from Google AI Studio
@@ -51,14 +51,11 @@ export const AI_PROVIDERS = {
   },
   github: {
     id: 'github' as const,
-    name: 'GitHub Models (Codestral)',
+    name: 'GitHub Models (OpenAI)',
     endpoint: 'https://models.github.ai/inference',
     apiKey: process.env.GITHUB_TOKEN || '',
-    defaultModel: 'mistral-ai/Codestral-2501',
-    models: ['mistral-ai/Codestral-2501', 'mistral-ai/Mistral-Large-2411', 'mistral-ai/Mistral-Small-24B-Instruct-2501'],
-    maxTokens: 4096,
-    temperature: 0.4,
-    topP: 1.0,
+    defaultModel: 'openai/gpt-4o-mini',
+    models: ['openai/gpt-4o-mini', 'openai/gpt-4o', 'openai/gpt-5', 'meta-llama/Meta-Llama-3.1-70B-Instruct', 'mistralai/Mistral-Large-2411'],
   },
 } as const;
 
